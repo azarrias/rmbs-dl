@@ -7,6 +7,7 @@ import sys
 
 Option = namedtuple("Option", "key argument")
 
+SHORT_URL_STR = u"http://www.rmbs.es/catalogo/titulos/"
 BASE_URL_STR = u"http://www.rmbs.es/catalogo.php?criterio="
 SEARCH_BUTTON_STR = u"&boton=Buscar"
 ALPHABET_LST = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', u'Ñ', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
@@ -30,6 +31,24 @@ g_book_list = []
 
 def exit(dummy):
    quit()
+   
+def invalidOption(dummy):
+   print u"Invalid option!"
+   print
+   
+def downloadBook(id):
+   global g_book_list
+   print u"Descargando libro: " + g_book_list[int(id)-1].title.text
+   url = g_book_list[int(id)-1].url
+   url = url.split("=")[-1]
+   url = SHORT_URL_STR + url
+   local_filename = url.split("/")[-1]
+   r = requests.get(url, stream = True) # download streaming
+   with open(local_filename, 'wb') as f:
+      for chunk in r.iter_content(chunk_size = 1024):
+	     if chunk: # filter out keep-alive new chunks
+		    f.write(chunk)
+   print
    
 def newSearch(dummy):
    global g_option_list
@@ -97,6 +116,7 @@ def displayAll(dummy):
    print
    
 def userPrompt(option_list):
+   global g_book_list
    for m in [OPTIONS[key] for key in option_list]: print m
    user_input = raw_input("> ")
    print
@@ -113,12 +133,15 @@ def userPrompt(option_list):
       op_key = "DISPLAY_ALL"
    elif user_input.upper() == "B" and "NEW_SEARCH" in option_list:
       op_key = "NEW_SEARCH"
+   elif user_input.isdigit() and user_input > 0 and int(user_input) <= len(g_book_list) and "DOWNLOAD" in option_list:
+      op_key = "DOWNLOAD"
    else:
       op_key = "INVALID"
    return Option(op_key, user_command)
    
 FUNCTION_DICT = { "EXIT" : exit, "BROWSE_AUTHORS" : browseAuthors, "SEARCH_KEYWORDS" : searchKeywords,
-   "DISPLAY_MORE" : displayMore, "DISPLAY_ALL" : displayAll, "NEW_SEARCH" : newSearch }
+   "DISPLAY_MORE" : displayMore, "DISPLAY_ALL" : displayAll, "NEW_SEARCH" : newSearch,
+   "DOWNLOAD" : downloadBook, "INVALID" : invalidOption }
    
 if sys.platform == "win32":
     import codecs
