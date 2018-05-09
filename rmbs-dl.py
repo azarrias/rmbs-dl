@@ -5,6 +5,8 @@ from collections import namedtuple
 import requests
 import sys
 
+Option = namedtuple("Option", "key argument")
+
 BASE_URL_STR = u"http://www.rmbs.es/catalogo.php?criterio="
 SEARCH_BUTTON_STR = u"&boton=Buscar"
 ALPHABET_LST = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', u'Ñ', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
@@ -15,81 +17,109 @@ OPTIONS = { "BROWSE_AUTHORS" : u"[A-Z] para buscar autores por orden alfabético
    "DISPLAY_MORE" : u"[P] para visualizar otra página de títulos",
    "DISPLAY_ALL" : u"[T] para visualizar todo (puede tardar según criterio)",
    "DOWNLOAD" : u"Número a la izquierda del título para descargarlo",
-   "DOWNLOAD_ALL" : u"[D] para descargar todos los títulos devueltos" }
+   "DOWNLOAD_ALL" : u"[D] para descargar todo (puede tardar según criterio)",
+   "NEW_SEARCH" :u"[B] para realizar una nueva búsqueda" }
 STR_QUIT = u"Hasta luego!"
-MESSAGE_STR = [u"[A-Z] para buscar autores por orden alfabético", u"Cualquier cadena para búsqueda por palabras clave", 
-   u"[0] para salir", u"[P] para visualizar otra página de títulos", u"[T] para visualizar todo (puede tardar según criterio)",
-   u"Número a la izquierda del título para descargarlo", u"[D] para descargar todos los títulos devueltos", u"Hasta luego!", 
-   u"Buscar por autor", ""]
+
+g_page_number = 0
+g_num_results = 0
+g_paginate = True
+g_option_list = ["SEARCH_KEYWORDS", "BROWSE_AUTHORS", "EXIT"]
+g_search_criteria = ""
+g_book_list = []
+
+def exit(dummy):
+   quit()
+   
+def newSearch(dummy):
+   global g_option_list
+   g_option_list = ["SEARCH_KEYWORDS", "BROWSE_AUTHORS", "EXIT"]
+   
+def browseAuthors(letter):
+   print u"TODO: Búsqueda por autor"
+   print
 
 def performRequest(url):
    result = requests.post(url)
    trimmed_result = result.content[BOM_UTF8_LEN:]
    return BeautifulSoup(trimmed_result, 'html.parser')
+   
+def scrapeData(soup):
+   global g_book_list
+   bookcase = soup.find("ul", { "id" : "cajalibros" })
+   books = bookcase.findAll("li")
+   for book in books:
+      Book = namedtuple("Book", "title author url")
+      title = book.find("span", { "class" : "titulocondicionado" })
+      author = book.find("span", { "class" : "autor" })
+      url = book.find("a")["href"]
+      b = Book(title, author, url)
+      g_book_list.append(b)
+      print str(len(g_book_list)) + ") " + title.text + " [" + author.text + "]"
 
-def searchKeyword(criteria):
-   page_number = 1
-   book_list = []
-   paginate = True
-   soup = performRequest(BASE_URL_STR + criteria + SEARCH_BUTTON_STR + "&pg=" + str(page_number))
+def searchKeywords(criteria):
+   global g_option_list, g_page_number, g_paginate, g_book_list, g_num_results, g_search_criteria
+   g_book_list = []
+   g_search_criteria = criteria
+   g_page_number = 1
+   g_paginate = True
+   soup = performRequest(BASE_URL_STR + criteria + SEARCH_BUTTON_STR + "&pg=" + str(g_page_number))
    result_info = soup.find("p", { "class" : "resultado" })
-   num_results = result_info.text.split()[4]
    print result_info.text + "\n"
-   if len(result_info.text.split()) <= 8:
-      return
-   num_results = int(num_results)   
-   while True:
-      soup = performRequest(BASE_URL_STR + criteria + SEARCH_BUTTON_STR + "&pg=" + str(page_number))
-      bookcase = soup.find("ul", { "id" : "cajalibros" })
-      books = bookcase.findAll("li")
-      for book in books:
-         Book = namedtuple("Book", "title author url")
-         title = book.find("span", { "class" : "titulocondicionado" })
-         author = book.find("span", { "class" : "autor" })
-         url = book.find("a")["href"]
-         b = Book(title, author, url)
-         book_list.append(b)
-         print str(len(book_list)) + ") " + title.text + " [" + author.text + "]"
-#         print str(len(book_list)) + ") " + title.text.encode('utf-8') + " [" + author.text.encode('utf-8') + "]"
-      if paginate:
-         valid_option = False
-         for m in [MESSAGE_STR[i] for i in [9, 5, 6]]: print m
-         if len(book_list) < num_results:
-	        for m in [MESSAGE_STR[i] for i in [3, 4]]: print m
-         else:
-	        break
-         while not valid_option:
-            user_input = raw_input("> ")
-            if len(book_list) < num_results and user_input.upper() == "P":
-               valid_option = True
-            elif len(book_list) < num_results and user_input.upper() == "T":
-               paginate = False
-               valid_option = True
-      if len(book_list) < num_results:
-         page_number += 1
+   if len(result_info.text.split()) > 8:
+      scrapeData(soup)
+      print
+      g_num_results = result_info.text.split()[4]
+      g_num_results = int(g_num_results)
+      if len(g_book_list) < g_num_results:
+         g_option_list = ["DISPLAY_MORE", "DISPLAY_ALL", "DOWNLOAD", "DOWNLOAD_ALL", "NEW_SEARCH", "EXIT"]
       else:
-         break
-#elif user_input.upper() == "D":
-#elif descarga titulo concreto
-
+         g_option_list = ["DOWNLOAD", "DOWNLOAD_ALL", "NEW_SEARCH", "EXIT"]
+		 
+def displayMore(dummy):
+   global g_search_criteria, g_page_number, g_book_list, g_num_results, g_option_list, g_paginate
+   g_page_number += 1
+   soup = performRequest(BASE_URL_STR + g_search_criteria + SEARCH_BUTTON_STR + "&pg=" + str(g_page_number))
+   scrapeData(soup)
+   if g_paginate:
+      if len(g_book_list) < g_num_results:
+         g_option_list = ["DISPLAY_MORE", "DISPLAY_ALL", "DOWNLOAD", "DOWNLOAD_ALL", "NEW_SEARCH", "EXIT"]
+      else:
+         g_option_list = ["DOWNLOAD", "DOWNLOAD_ALL", "NEW_SEARCH", "EXIT"]
+      print
+	  
+def displayAll(dummy):
+   global g_paginate, g_book_list, g_num_results
+   g_paginate = False
+   while len(g_book_list) < g_num_results:
+      displayMore(dummy)
+   g_option_list = ["DOWNLOAD", "DOWNLOAD_ALL", "NEW_SEARCH", "EXIT"]
+   print
+   
 def userPrompt(option_list):
    for m in [OPTIONS[key] for key in option_list]: print m
    user_input = raw_input("> ")
+   print
    user_command = "+".join(user_input.split()).decode(sys.stdin.encoding)
    if user_command == "0" and "EXIT" in option_list:
-      print OPTIONS["EXIT"]
-      quit()
+      op_key = "EXIT"
    elif user_command.upper() in ALPHABET_LST and "BROWSE_AUTHORS" in option_list:
-      print u"Búsqueda por autor"
-      print
+      op_key = "BROWSE_AUTHORS"
    elif user_command.strip() != "" and "SEARCH_KEYWORDS" in option_list:
-      print
-      searchKeyword(user_command)
+      op_key = "SEARCH_KEYWORDS"
+   elif user_input.upper() == "P" and "DISPLAY_MORE" in option_list:
+      op_key = "DISPLAY_MORE"
+   elif user_input.upper() == "T" and "DISPLAY_ALL" in option_list:
+      op_key = "DISPLAY_ALL"
+   elif user_input.upper() == "B" and "NEW_SEARCH" in option_list:
+      op_key = "NEW_SEARCH"
    else:
-      print u"Opción no válida!"
-      print
-      userPrompt(option_list)
-
+      op_key = "INVALID"
+   return Option(op_key, user_command)
+   
+FUNCTION_DICT = { "EXIT" : exit, "BROWSE_AUTHORS" : browseAuthors, "SEARCH_KEYWORDS" : searchKeywords,
+   "DISPLAY_MORE" : displayMore, "DISPLAY_ALL" : displayAll, "NEW_SEARCH" : newSearch }
+   
 if sys.platform == "win32":
     import codecs
     from ctypes import WINFUNCTYPE, windll, POINTER, byref, c_int
@@ -276,6 +306,8 @@ if sys.platform == "win32":
 
     # if you like:
     sys.argv = argv
-	  
+
 while True:
-   command = userPrompt(["EXIT", "BROWSE_AUTHORS", "SEARCH_KEYWORDS"])
+   command = userPrompt(g_option_list)
+   FUNCTION_DICT[command.key](command.argument)
+
