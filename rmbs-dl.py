@@ -6,13 +6,17 @@ import requests
 import sys
 
 Option = namedtuple("Option", "key argument")
+Author = namedtuple("Author", "name url")
 
 SHORT_URL_STR = u"http://www.rmbs.es/catalogo/titulos/"
 BASE_URL_STR = u"http://www.rmbs.es/catalogo.php?criterio="
+BASE_URL_AUTH_STR = u"http://www.rmbs.es/catalogo.php?criterio2="
 SEARCH_BUTTON_STR = u"&boton=Buscar"
+BROWSE_AUTHORS_STR = u"&buscarautores=si"
 ALPHABET_LST = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', u'Ñ', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
 BOM_UTF8_LEN = 3
 OPTIONS = { "BROWSE_AUTHORS" : u"[A-Z] para buscar autores por orden alfabético",
+   "BROWSE_AUTHOR_BOOKS" : u"Número a la izquierda del autor para ver sus obras",
    "SEARCH_KEYWORDS" : u"Cualquier cadena para búsqueda por palabras clave",
    "EXIT" : u"[0] para salir",
    "DISPLAY_MORE" : u"[P] para visualizar otra página de títulos",
@@ -21,6 +25,7 @@ OPTIONS = { "BROWSE_AUTHORS" : u"[A-Z] para buscar autores por orden alfabético
    "DOWNLOAD_ALL" : u"[D] para descargar todo (puede tardar según criterio)",
    "NEW_SEARCH" :u"[B] para realizar una nueva búsqueda" }
 STR_QUIT = u"Hasta luego!"
+STR_NO_RESULTS = u"No ha habido ningún resultado en esta búsqueda."
 
 g_page_number = 0
 g_num_results = 0
@@ -33,7 +38,7 @@ def exit(dummy):
    quit()
    
 def invalidOption(dummy):
-   print u"Invalid option!"
+   print u"¡Opción inválida!"
    print
    
 def downloadBook(id):
@@ -54,8 +59,11 @@ def newSearch(dummy):
    global g_option_list
    g_option_list = ["SEARCH_KEYWORDS", "BROWSE_AUTHORS", "EXIT"]
    
+#http://www.rmbs.es/catalogo.php?criterio2=A&buscarautores=si
 def browseAuthors(letter):
-   print u"TODO: Búsqueda por autor"
+   print u"Búsqueda de autores por la letra [" + letter.upper() + u"]:"
+   soup = performRequest(BASE_URL_AUTH_STR + letter + BROWSE_AUTHORS_STR)
+   author_list = scrapeAuthors(soup)
    print
 
 def performRequest(url):
@@ -63,7 +71,7 @@ def performRequest(url):
    trimmed_result = result.content[BOM_UTF8_LEN:]
    return BeautifulSoup(trimmed_result, 'html.parser')
    
-def scrapeData(soup):
+def scrapeBooks(soup):
    global g_book_list
    bookcase = soup.find("ul", { "id" : "cajalibros" })
    books = bookcase.findAll("li")
@@ -75,6 +83,23 @@ def scrapeData(soup):
       b = Book(title, author, url)
       g_book_list.append(b)
       print str(len(g_book_list)) + ") " + title.text + " [" + author.text + "]"
+	  
+def scrapeAuthors(soup):
+   global g_option_list
+   author_list = []
+   authors_soup = soup.find("dl", { "class" : "autores" })
+   authors = authors_soup.findAll("dd")
+   for author in authors:
+      name = author.find("a").text
+      url = author.find("a")["href"]
+      a = Author(name, url)
+      author_list.append(a)
+      print str(len(author_list)) + ") " + name
+   if len(author_list) == 0:
+      print STR_NO_RESULTS
+   else:
+      g_option_list = ["SEARCH_KEYWORDS", "BROWSE_AUTHOR_BOOKS", "BROWSE_AUTHORS", "EXIT"]
+   return author_list
 
 def searchKeywords(criteria):
    global g_option_list, g_page_number, g_paginate, g_book_list, g_num_results, g_search_criteria
@@ -86,7 +111,7 @@ def searchKeywords(criteria):
    result_info = soup.find("p", { "class" : "resultado" })
    print result_info.text + "\n"
    if len(result_info.text.split()) > 8:
-      scrapeData(soup)
+      scrapeBooks(soup)
       print
       g_num_results = result_info.text.split()[4]
       g_num_results = int(g_num_results)
@@ -99,7 +124,7 @@ def displayMore(dummy):
    global g_search_criteria, g_page_number, g_book_list, g_num_results, g_option_list, g_paginate
    g_page_number += 1
    soup = performRequest(BASE_URL_STR + g_search_criteria + SEARCH_BUTTON_STR + "&pg=" + str(g_page_number))
-   scrapeData(soup)
+   scrapeBooks(soup)
    if g_paginate:
       if len(g_book_list) < g_num_results:
          g_option_list = ["DISPLAY_MORE", "DISPLAY_ALL", "DOWNLOAD", "DOWNLOAD_ALL", "NEW_SEARCH", "EXIT"]
@@ -139,7 +164,7 @@ def userPrompt(option_list):
       op_key = "INVALID"
    return Option(op_key, user_command)
    
-FUNCTION_DICT = { "EXIT" : exit, "BROWSE_AUTHORS" : browseAuthors, "SEARCH_KEYWORDS" : searchKeywords,
+FUNCTION_DICT = { "EXIT" : exit, "BROWSE_AUTHORS" : browseAuthors, "BROWSE_AUTHOR_BOOKS" : browseAuthorBooks, "SEARCH_KEYWORDS" : searchKeywords,
    "DISPLAY_MORE" : displayMore, "DISPLAY_ALL" : displayAll, "NEW_SEARCH" : newSearch,
    "DOWNLOAD" : downloadBook, "INVALID" : invalidOption }
    
