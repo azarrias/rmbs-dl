@@ -57,6 +57,11 @@ def downloadBook(id):
 		    f.write(chunk)
    print
    
+def downloadAll(dummy):
+   global g_book_list
+   for i in range(len(g_book_list)):
+      downloadBook(i)
+   
 def newSearch(dummy):
    global g_option_list
    g_option_list = ["SEARCH_KEYWORDS", "BROWSE_AUTHORS", "EXIT"]
@@ -169,13 +174,15 @@ def userPrompt(option_list):
       op_key = "DOWNLOAD"
    elif user_input.isdigit() and user_input > 0 and int(user_input) <= len(g_author_list) and "BROWSE_AUTHOR_BOOKS" in option_list:
       op_key = "BROWSE_AUTHOR_BOOKS"
+   elif user_input.upper() == "D" and "DOWNLOAD_ALL" in option_list:
+      op_key = "DOWNLOAD_ALL"
    else:
       op_key = "INVALID"
    return Option(op_key, user_command)
    
 FUNCTION_DICT = { "EXIT" : exit, "BROWSE_AUTHORS" : browseAuthors, "BROWSE_AUTHOR_BOOKS" : browseAuthorBooks, "SEARCH_KEYWORDS" : searchKeywords,
-   "DISPLAY_MORE" : displayMore, "DISPLAY_ALL" : displayAll, "NEW_SEARCH" : newSearch,
-   "DOWNLOAD" : downloadBook, "INVALID" : invalidOption }
+   "DISPLAY_MORE" : displayMore, "DISPLAY_ALL" : displayAll, "NEW_SEARCH" : newSearch, "DOWNLOAD" : downloadBook, "DOWNLOAD_ALL" : downloadAll, 
+   "INVALID" : invalidOption }
    
 if sys.platform == "win32":
     import codecs
