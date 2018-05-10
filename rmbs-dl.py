@@ -8,6 +8,7 @@ import sys
 Option = namedtuple("Option", "key argument")
 Author = namedtuple("Author", "name url")
 
+DOMAIN_NAME_STR = u"http://www.rmbs.es/"
 SHORT_URL_STR = u"http://www.rmbs.es/catalogo/titulos/"
 BASE_URL_STR = u"http://www.rmbs.es/catalogo.php?criterio="
 BASE_URL_AUTH_STR = u"http://www.rmbs.es/catalogo.php?criterio2="
@@ -31,8 +32,9 @@ g_page_number = 0
 g_num_results = 0
 g_paginate = True
 g_option_list = ["SEARCH_KEYWORDS", "BROWSE_AUTHORS", "EXIT"]
-g_search_criteria = ""
+g_search_criteria_url = ""
 g_book_list = []
+g_author_list = []
 
 def exit(dummy):
    quit()
@@ -59,7 +61,6 @@ def newSearch(dummy):
    global g_option_list
    g_option_list = ["SEARCH_KEYWORDS", "BROWSE_AUTHORS", "EXIT"]
    
-#http://www.rmbs.es/catalogo.php?criterio2=A&buscarautores=si
 def browseAuthors(letter):
    print u"Búsqueda de autores por la letra [" + letter.upper() + u"]:"
    soup = performRequest(BASE_URL_AUTH_STR + letter + BROWSE_AUTHORS_STR)
@@ -85,29 +86,35 @@ def scrapeBooks(soup):
       print str(len(g_book_list)) + ") " + title.text + " [" + author.text + "]"
 	  
 def scrapeAuthors(soup):
-   global g_option_list
-   author_list = []
+   global g_option_list, g_author_list
+   g_author_list = []
    authors_soup = soup.find("dl", { "class" : "autores" })
    authors = authors_soup.findAll("dd")
    for author in authors:
       name = author.find("a").text
       url = author.find("a")["href"]
       a = Author(name, url)
-      author_list.append(a)
-      print str(len(author_list)) + ") " + name
-   if len(author_list) == 0:
+      g_author_list.append(a)
+      print str(len(g_author_list)) + ") " + name
+   if len(g_author_list) == 0:
       print STR_NO_RESULTS
    else:
-      g_option_list = ["SEARCH_KEYWORDS", "BROWSE_AUTHOR_BOOKS", "BROWSE_AUTHORS", "EXIT"]
-   return author_list
+      g_option_list = ["BROWSE_AUTHOR_BOOKS", "BROWSE_AUTHORS", "EXIT"]
 
+def browseAuthorBooks(id):
+   global g_author_list
+   getPage(DOMAIN_NAME_STR + g_author_list[int(id)-1].url)
+   
 def searchKeywords(criteria):
-   global g_option_list, g_page_number, g_paginate, g_book_list, g_num_results, g_search_criteria
+   getPage(BASE_URL_STR + criteria + SEARCH_BUTTON_STR)
+		 
+def getPage(url):
+   global g_option_list, g_page_number, g_paginate, g_book_list, g_num_results, g_search_criteria_url
    g_book_list = []
-   g_search_criteria = criteria
+   g_search_criteria_url = url
    g_page_number = 1
    g_paginate = True
-   soup = performRequest(BASE_URL_STR + criteria + SEARCH_BUTTON_STR + "&pg=" + str(g_page_number))
+   soup = performRequest(url + "&pg=" + str(g_page_number))
    result_info = soup.find("p", { "class" : "resultado" })
    print result_info.text + "\n"
    if len(result_info.text.split()) > 8:
@@ -121,9 +128,9 @@ def searchKeywords(criteria):
          g_option_list = ["DOWNLOAD", "DOWNLOAD_ALL", "NEW_SEARCH", "EXIT"]
 		 
 def displayMore(dummy):
-   global g_search_criteria, g_page_number, g_book_list, g_num_results, g_option_list, g_paginate
+   global g_search_criteria_url, g_page_number, g_book_list, g_num_results, g_option_list, g_paginate
    g_page_number += 1
-   soup = performRequest(BASE_URL_STR + g_search_criteria + SEARCH_BUTTON_STR + "&pg=" + str(g_page_number))
+   soup = performRequest(g_search_criteria_url + "&pg=" + str(g_page_number))
    scrapeBooks(soup)
    if g_paginate:
       if len(g_book_list) < g_num_results:
@@ -133,7 +140,7 @@ def displayMore(dummy):
       print
 	  
 def displayAll(dummy):
-   global g_paginate, g_book_list, g_num_results
+   global g_paginate, g_book_list, g_num_results, g_option_list
    g_paginate = False
    while len(g_book_list) < g_num_results:
       displayMore(dummy)
@@ -160,6 +167,8 @@ def userPrompt(option_list):
       op_key = "NEW_SEARCH"
    elif user_input.isdigit() and user_input > 0 and int(user_input) <= len(g_book_list) and "DOWNLOAD" in option_list:
       op_key = "DOWNLOAD"
+   elif user_input.isdigit() and user_input > 0 and int(user_input) <= len(g_author_list) and "BROWSE_AUTHOR_BOOKS" in option_list:
+      op_key = "BROWSE_AUTHOR_BOOKS"
    else:
       op_key = "INVALID"
    return Option(op_key, user_command)
